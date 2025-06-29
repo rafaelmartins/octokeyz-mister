@@ -1,18 +1,44 @@
 package main
 
 import (
+	"errors"
+	"flag"
 	"fmt"
 	"net"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/rafaelmartins/octokeyz-mister/internal/cleanup"
 	"github.com/rafaelmartins/octokeyz-mister/internal/inotify"
 	"github.com/rafaelmartins/octokeyz-mister/internal/ipaddr"
+	"github.com/rafaelmartins/octokeyz-mister/internal/process"
 	"github.com/rafaelmartins/octokeyz-mister/internal/uinput"
 	"github.com/rafaelmartins/octokeyz-mister/internal/vkbd"
 	"rafaelmartins.com/p/octokeyz"
 )
+
+func waitForOctokeyz(sn string) (*octokeyz.Device, error) {
+	tick := time.NewTicker(time.Second)
+	tim := time.NewTimer(2 * time.Minute)
+
+	for {
+		dev, err := octokeyz.GetDevice(sn)
+		if err == nil {
+			return dev, nil
+		}
+		if errors.Is(err, octokeyz.ErrDeviceLocked) {
+			return nil, err
+		}
+
+		select {
+		case <-tick.C:
+			continue
+		case <-tim.C:
+			return nil, err
+		}
+	}
+}
 
 func updateCore(dev *octokeyz.Device) error {
 	v, err := os.ReadFile("/tmp/CORENAME")
@@ -22,10 +48,32 @@ func updateCore(dev *octokeyz.Device) error {
 	return dev.DisplayLine(octokeyz.DisplayLine4, fmt.Sprintf("Core: %s", strings.TrimSpace(string(v))), octokeyz.DisplayLineAlignLeft)
 }
 
+var stop = flag.Bool("stop", false, "stop existing process")
+
 func main() {
 	defer cleanup.Cleanup()
 
-	dev, err := octokeyz.GetDevice("")
+	flag.Parse()
+
+	proc, err := process.New("/run/octokeyz-mister.pid")
+	cleanup.Check(err)
+
+	if *stop {
+		if proc > 0 {
+			cleanup.Check(proc.Kill())
+			return
+		}
+
+		cleanup.Check("no process running")
+		return
+	}
+
+	if proc > 0 {
+		cleanup.Check("process already running")
+		return
+	}
+
+	dev, err := waitForOctokeyz("")
 	cleanup.Check(err)
 
 	cleanup.Check(dev.Open())
