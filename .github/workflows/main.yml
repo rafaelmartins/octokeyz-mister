@@ -36,7 +36,8 @@ jobs:
         run: |
           GOOS=linux GOARCH=arm go build -o root/Scripts/.octokeyz/octokeyz-mister
           cp -v Scripts/* root/Scripts/
-          VERSION="$(root/Scripts/.octokeyz/octokeyz-mister -v | sed s/^v//)"
+          go build
+          VERSION="$(./octokeyz-mister -v | sed s/^v//)"
           echo "version=${VERSION}" >> $GITHUB_OUTPUT
           pushd root > /dev/null
           zip -r9 "../octokeyz-mister-${VERSION}.zip" *
@@ -73,6 +74,6 @@ jobs:
       - uses: ncipollo/release-action@2c591bcc8ecdcd2db72b97d6147f871fcd833ba5
         with:
           name: ${{ steps.meta.outputs.name }}
-          artifacts: dist/iceflashprog-*
+          artifacts: dist/octokeyz-mister-*
           bodyFile: body.md
           generateReleaseNotes: true
