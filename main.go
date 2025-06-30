@@ -8,6 +8,7 @@ import (
 	"io/fs"
 	"net"
 	"os"
+	"runtime/debug"
 	"strings"
 	"time"
 
@@ -51,8 +52,9 @@ func updateCore(dev *octokeyz.Device) error {
 }
 
 var (
-	stop  = flag.Bool("stop", false, "stop existing process")
-	init_ = flag.Bool("init", false, "enable or disable initscript, depending on -stop")
+	stop    = flag.Bool("stop", false, "stop existing process")
+	init_   = flag.Bool("init", false, "enable or disable initscript, depending on -stop")
+	version = flag.Bool("v", false, "show version and exit")
 
 	//go:embed S98octokeyz
 	initscript []byte
@@ -62,6 +64,16 @@ func main() {
 	defer cleanup.Cleanup()
 
 	flag.Parse()
+
+	if *version {
+		if bi, ok := debug.ReadBuildInfo(); ok {
+			fmt.Println(bi.Main.Version)
+			return
+		}
+
+		fmt.Println("UNKNOWN")
+		cleanup.Exit(1)
+	}
 
 	proc, err := process.New("/run/octokeyz-mister.pid")
 	cleanup.Check(err)
