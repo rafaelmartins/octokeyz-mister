@@ -1,9 +1,11 @@
 package main
 
 import (
+	_ "embed"
 	"errors"
 	"flag"
 	"fmt"
+	"io/fs"
 	"net"
 	"os"
 	"strings"
@@ -48,7 +50,13 @@ func updateCore(dev *octokeyz.Device) error {
 	return dev.DisplayLine(octokeyz.DisplayLine4, fmt.Sprintf("Core: %s", strings.TrimSpace(string(v))), octokeyz.DisplayLineAlignLeft)
 }
 
-var stop = flag.Bool("stop", false, "stop existing process")
+var (
+	stop  = flag.Bool("stop", false, "stop existing process")
+	init_ = flag.Bool("init", false, "enable or disable initscript, depending on -stop")
+
+	//go:embed S98octokeyz
+	initscript []byte
+)
 
 func main() {
 	defer cleanup.Cleanup()
@@ -59,6 +67,12 @@ func main() {
 	cleanup.Check(err)
 
 	if *stop {
+		if *init_ {
+			if err := os.Remove("/etc/init.d/S98octokeyz"); !errors.Is(err, fs.ErrNotExist) {
+				cleanup.Check(err)
+			}
+		}
+
 		if proc > 0 {
 			cleanup.Check(proc.Kill())
 			return
@@ -71,6 +85,12 @@ func main() {
 	if proc > 0 {
 		cleanup.Check("process already running")
 		return
+	}
+
+	if *init_ {
+		if _, err := os.Stat("/etc/init.d/S98octokeyz"); errors.Is(err, fs.ErrNotExist) {
+			cleanup.Check(os.WriteFile("/etc/init.d/S98octokeyz", initscript, 0777))
+		}
 	}
 
 	dev, err := waitForOctokeyz("")
